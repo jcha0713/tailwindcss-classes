@@ -36,23 +36,27 @@ async function fetchData(url) {
  * @returns {Promise} promise object that has tailwindcss class name as key and css code as value
  */
 async function getTableContents(url) {
-  const html = await fetchData(url)
-  const $ = cheerio.load(html)
-  const header = $('header')
-  let propertyIdx = 0
-  header.next().find('thead').children().children().each((headIdx, head) => {
-    if ($(head).text() === 'Properties') {
-      propertyIdx = headIdx
-    }
-  })
+  try {
+    const html = await fetchData(url)
+    const $ = cheerio.load(html)
+    const header = $('header')
+    let propertyIdx = 0
+    header.next().find('thead').children().children().each((headIdx, head) => {
+      if ($(head).text() === 'Properties') {
+        propertyIdx = headIdx
+      }
+    })
 
-  let resultMap = {}
+    let resultMap = {}
 
-  header.next().find('tbody').children().each((rowIdx, row) => {
-    resultMap[$(row).children().first().text()] = $(row).children().eq(propertyIdx).text().replace(/\/(\*.*?\*)\//gm, '').trim()
-  })
+    header.next().find('tbody').children().each((rowIdx, row) => {
+      resultMap[$(row).children().first().text()] = $(row).children().eq(propertyIdx).text().replace(/\/(\*.*?\*)\//gm, '').trim()
+    })
 
-  return resultMap
+    return resultMap
+  } catch(err) {
+    console.error(err)
+  }
 }
 
 /* Construct object for each page and write a JSON file */
@@ -69,7 +73,7 @@ async function writeJSONFile() {
     console.log('done!')
   } catch(err) {
       console.log("An error occured while writing JSON Object to File.");
-      return console.log(err);
+      return console.error(err);
   }
 }
 
