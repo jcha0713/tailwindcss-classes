@@ -1,13 +1,11 @@
 import * as cheerio from 'cheerio'
-import fs from 'fs'
+import fs from 'fs/promises'
 import titles from './titles.js'
 
-const classMap = {}
-
-const excludeSet = new Set(['/', 'Start', 'End'])
+const excludeSet = new Set(['/', 'Start', 'Between', 'End'])
 
 const modifiedTitles = titles.map(title => {
-  return title.split(' ').filter(word => !excludeSet.has(word) ).map(word => {
+  return title.split(' ').filter(word => !excludeSet.has(word)).map(word => {
     if (word.includes('-')) {
       const hyphenIdx = word.indexOf('-')
       if (word.length !== hyphenIdx) {
@@ -34,20 +32,31 @@ async function getTableContents(url) {
       propertyIdx = headIdx
     }
   })
+
+  let resultMap = {}
+
   header.next().find('tbody').children().each((rowIdx, row) => {
-    classMap[$(row).children().first().text()] = $(row).children().eq(propertyIdx).text().replace('\n', '').replace(/[/]\*.*\*[/]/, '').trim()
+    resultMap[$(row).children().first().text()] = $(row).children().eq(propertyIdx).text().replace(/\/(\*.*?\*)\//gm, '').trim()
   })
-  // console.log(classMap)
+
+  return resultMap
 }
 
-modifiedTitles.forEach(async (page) => {
-  await getTableContents(`https://tailwindcss.com/docs/${page}`)
-  fs.writeFile("tw.json", JSON.stringify(classMap, null, 2), 'utf8', function (err) {
-    console.log("done!");
-    if (err) {
+async function writeJSONFile() {
+  let classMap = {}
+  
+  for (const page of modifiedTitles) {
+    const resultMapForEachPage = await getTableContents(`https://tailwindcss.com/docs/${page}`)
+    classMap = { ...classMap, ...resultMapForEachPage }
+  }
+
+  try {
+    await fs.writeFile("tw.json", JSON.stringify(classMap, null, 2))
+    console.log('done!')
+  } catch(err) {
       console.log("An error occured while writing JSON Object to File.");
       return console.log(err);
-    }
-  });
-})
+  }
+}
 
+await writeJSONFile()
