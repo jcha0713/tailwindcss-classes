@@ -1,30 +1,24 @@
-import * as cheerio from "cheerio";
-import fs from "fs/promises";
-import titles from "./titles.js";
+import * as cheerio from 'cheerio'
+import fs from 'fs/promises'
 
-const excludeSet = new Set(["/", "Start", "Between", "End"]);
-
-// For each title in the titles list, check if it contains any word that is in the excludeSet.
-// Capitalize the title and replace whitespaces with hypens
-const modifiedTitles = titles.map((title) => {
-  return title
-    .split(" ")
-    .filter((word) => !excludeSet.has(word))
-    .map((word) => {
-      if (word.includes("-")) {
-        const hyphenIdx = word.indexOf("-");
-        if (word.length !== hyphenIdx) {
-          word =
-            word.slice(0, hyphenIdx) +
-            "-" +
-            word.charAt(hyphenIdx + 1).toLowerCase() +
-            word.slice(hyphenIdx + 2);
-        }
-      }
-      return word.charAt(0).toLowerCase() + word.slice(1);
-    })
-    .join("-");
-});
+const excludeSet = new Set(['container'])
+const titleSet = new Set([
+  'Layout',
+  'Flexbox & Grid',
+  'Spacing',
+  'Sizing',
+  'Typography',
+  'Backgrounds',
+  'Borders',
+  'Effects',
+  'Filters',
+  'Tables',
+  'Transitions & Animation',
+  'Transforms',
+  'Interactivity',
+  'SVG',
+  'Accessibility',
+])
 
 /**
  * It requires the latest node version as it uses the builtin fetch api
@@ -33,9 +27,47 @@ const modifiedTitles = titles.map((title) => {
  * @returns {Promise} text component of the response
  */
 async function fetchData(url) {
-  const response = await fetch(url);
-  const body = await response.text();
-  return body;
+  const response = await fetch(url)
+  const body = await response.text()
+  return body
+}
+
+/**
+ * @param {string} url url of page(tailwindcss doc)
+ */
+async function getLinks(url) {
+  try {
+    const html = await fetchData(url)
+    const $ = cheerio.load(html)
+    const links = []
+    $('#nav')
+      .children()
+      .last() // ul
+      .children()
+      .each((_, list) => {
+        const li = $(list)
+        // only for the ones in the titleSet
+        if (
+          li.children().length > 1 &&
+          titleSet.has(li.children().first().text())
+        ) {
+          li.children()
+            .last()
+            .children()
+            .each((_, list) => {
+              const li = $(list)
+              // grap the link from href attr
+              const link = li.children('a').attr('href')
+              if (!excludeSet.has(link.split('/')[2])) {
+                links.push(link)
+              }
+            })
+        }
+      })
+    return links
+  } catch (e) {
+    console.log(e)
+  }
 }
 
 /**
@@ -44,60 +76,61 @@ async function fetchData(url) {
  */
 async function getTableContents(url) {
   try {
-    const html = await fetchData(url);
-    const $ = cheerio.load(html);
-    const header = $("header");
-    let propertyIdx = 0;
+    const html = await fetchData(url)
+    const $ = cheerio.load(html)
+    const header = $('header')
+    let propertyIdx = 0
     header
       .next()
-      .find("thead")
+      .find('thead')
       .children()
       .children()
       .each((headIdx, head) => {
-        if ($(head).text() === "Properties") {
-          propertyIdx = headIdx;
+        if ($(head).text() === 'Properties') {
+          propertyIdx = headIdx
         }
-      });
+      })
 
-    let resultMap = {};
+    let resultMap = {}
 
     header
       .next()
-      .find("tbody")
+      .find('tbody')
       .children()
       .each((rowIdx, row) => {
         resultMap[$(row).children().first().text()] = $(row)
           .children()
           .eq(propertyIdx)
           .text()
-          .replace(/\/(\*.*?\*)\//gm, "")
-          .trim();
-      });
+          .replace(/\/(\*.*?\*)\//gm, '')
+          .trim()
+      })
 
-    return resultMap;
+    return resultMap
   } catch (err) {
-    console.error(err);
+    console.error(err)
   }
 }
 
 /* Construct object for each page and write a JSON file */
 async function writeJSONFile() {
-  let classMap = {};
-
-  for (const page of modifiedTitles) {
+  let classMap = {}
+  // const modifiedTitles = modify(titles)
+  const links = await getLinks('https://tailwindcss.com/docs/')
+  for (const page of links) {
     const resultMapForEachPage = await getTableContents(
-      `https://tailwindcss.com/docs/${page}`
-    );
-    classMap = { ...classMap, ...resultMapForEachPage };
+      `https://tailwindcss.com${page}`
+    )
+    classMap = { ...classMap, ...resultMapForEachPage }
   }
 
   try {
-    await fs.writeFile("tw.json", JSON.stringify(classMap, null, 2));
-    console.log("done!");
+    await fs.writeFile('tw.json', JSON.stringify(classMap, null, 2))
+    console.log('done!')
   } catch (err) {
-    console.log("An error occured while writing JSON Object to File.");
-    return console.error(err);
+    console.log('An error occured while writing JSON Object to File.')
+    return console.error(err)
   }
 }
 
-await writeJSONFile();
+await writeJSONFile()
